@@ -37,7 +37,7 @@ def fetchData(user_question):
             vector_store=vector_store, persist_dir=PERSIST_DIR
         )
         index = load_index_from_storage(storage_context=storage_context)
-        query_engine = index.as_query_engine()
+        query_engine = index.as_query_engine(response_mode="tree_summarize")
         response = query_engine.query(user_question)
 
         sources = []
