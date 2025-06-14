@@ -86,7 +86,7 @@ def send_message():
     })
 
 @app.route("/reset")
-def reset_chat():More actions
+def reset_chat():
     session.clear()
     return '', 204
 
