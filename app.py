@@ -8,7 +8,7 @@ from llama_index.core import StorageContext, load_index_from_storage
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Replace with a secure value
+app.secret_key = 'Pa55w0rd@123'  # Replace with a secure value
 PERSIST_DIR = "./storage"
 WELCOME_MESSAGE = "Hello, I am your HR Bot. I will try my best to answer your question from my knowledge base."
 
