@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HR Bot Chat</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #eef2f7;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      height: 90vh;
+      overflow: hidden;
+    }
+
+    .header {
+      background-color: #0047AB;
+      color: white;
+      padding: 16px;
+      text-align: center;
+      font-size: 1.5em;
+      font-weight: bold;
+    }
+
+    .chat-box {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message-row {
+      display: flex;
+      margin: 10px 0;
+      align-items: flex-start;
+    }
+
+    .message-row.user {
+      justify-content: flex-end;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-right: 10px;
+    }
+
+    .message-row.user .avatar {
+      margin-left: 10px;
+      margin-right: 0;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
+    .bot {
+      background: #e6f0ff;
+      color: #333;
+      border-top-left-radius: 0;
+    }
+
+    .user {
+      background: #dcf8c6;
+      color: #333;
+      border-top-right-radius: 0;
+    }
+
+    .input-area {
+      display: flex;
+      padding: 16px;
+      border-top: 1px solid #ddd;
+      background: #fafafa;
+    }
+
+    #message-input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+      outline: none;
+    }
+
+    button {
+      margin-left: 10px;
+      padding: 10px 16px;
+      font-size: 1em;
+      border: none;
+      border-radius: 20px;
+      background-color: #0047AB;
+      color: white;
+      cursor: pointer;
+    }
+
+    .citation {
+      font-size: 0.85em;
+      margin-top: 6px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">Chat with HR Bot</div>
+    <div id="chat-box" class="chat-box"></div>
+    <div class="input-area">
+      <input
+        id="message-input"
+        type="text"
+        placeholder="Ask your question..."
+        autocomplete="off"
+      />
+      <button onclick="sendMessage()">Send</button>
+      <button onclick="endChat()">End Chat</button>
+    </div>
+  </div>
+
+  <script>
+    const chatBox = document.getElementById("chat-box");
+    const inputField = document.getElementById("message-input");
+
+    function createAvatar(sender) {
+      if (sender === "AI") {
+        return "https://img.icons8.com/clouds/100/robot.png";
+      } else {
+        return "https://img.icons8.com/color/96/user-male-circle--v1.png";
+      }
+    }
+
+    function appendMessage(sender, message, sources = []) {
+      const row = document.createElement("div");
+      row.classList.add("message-row", sender === "Human" ? "user" : "bot");
+
+      const avatar = document.createElement("img");
+      avatar.className = "avatar";
+      avatar.src = createAvatar(sender);
+
+      const msgDiv = document.createElement("div");
+      msgDiv.classList.add("message", sender === "Human" ? "user" : "bot");
+      msgDiv.innerHTML = message;
+
+      if (sender === "AI" && sources.length > 0) {
+        const citeDiv = document.createElement("div");
+        citeDiv.className = "citation";
+        citeDiv.innerHTML = "<strong>Sources:</strong> " + sources.join(", ");
+        msgDiv.appendChild(citeDiv);
+      }
+
+      if (sender === "Human") {
+        row.appendChild(msgDiv);
+        row.appendChild(avatar);
+      } else {
+        row.appendChild(avatar);
+        row.appendChild(msgDiv);
+      }
+
+      chatBox.appendChild(row);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const message = inputField.value.trim();
+      if (!message) return;
+
+      appendMessage("Human", message);
+      inputField.value = "";
+
+      appendMessage("AI", "Fetching ... please wait");
+
+      const res = await fetch("/send_message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+
+      const data = await res.json();
+      chatBox.lastChild.remove(); // Remove "Typing..."
+
+      if (data.error) {
+        appendMessage("AI", "Error: " + data.error);
+      } else {
+        appendMessage("AI", data.bot_response, data.sources || []);
+      }
+    }
+
+    async function endChat() {
+      await fetch("/reset");
+      location.reload();
+    }
+
+    // Send on Enter
+    inputField.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault(); // Avoid newline
+        sendMessage();
+      }
+    });
+
+    // Load initial messages from Flask session
+    const initialMessages = {{ chat_history|tojson }};
+    initialMessages.forEach(msg => {
+      appendMessage(msg.sender, msg.message);
+    });
+  </script>
+</body>
+</html>
