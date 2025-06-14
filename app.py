@@ -3,9 +3,13 @@ from dotenv import load_dotenv
 import os
 from llama_index.vector_stores.faiss import FaissVectorStore
 from llama_index.core import StorageContext, load_index_from_storage
+import azure.cognitiveservices.speech as speechsdk
 
 # Load environment variables
 load_dotenv()
+
+AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
+AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")
 
 app = Flask(__name__)
 app.secret_key = 'Pa55w0rd@123'  # Replace with a secure value
@@ -49,6 +53,15 @@ def fetchData(user_question):
 
     except Exception as e:
         return f"Error: {str(e)}", []
+
+speech_config = speechsdk.SpeechConfig(subscription=AZURE_SPEECH_KEY, region=AZURE_SPEECH_REGION)
+speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"   
+speech_config.speech_synthesis_language = "en-US"
+
+speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
+
+WelcomeMessage = "Hello, I am your HR Bot. I will try my best to answer your question from my knowledge base."
+speech_synthesizer.speak_text_async(WelcomeMessage).get()
 
 @app.route("/")
 def chat():
