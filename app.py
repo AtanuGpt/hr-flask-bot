@@ -1,9 +1,6 @@
-# app.py
 from flask import Flask, render_template, request, session, jsonify
 from dotenv import load_dotenv
 import os
-import uuid
-import azure.cognitiveservices.speech as speechsdk
 from llama_index.vector_stores.faiss import FaissVectorStore
 from llama_index.core import StorageContext, load_index_from_storage
 
@@ -11,46 +8,46 @@ from llama_index.core import StorageContext, load_index_from_storage
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.secret_key = 'Pa55w0rd@123'  # Replace with a secure value
 PERSIST_DIR = "./storage"
 WELCOME_MESSAGE = "Hello, I am your HR Bot. I will try my best to answer your question from my knowledge base."
 
-# Text-to-Speech Function
-def text_to_speech(text):
-    speech_key = os.getenv("AZURE_SPEECH_KEY")
-    speech_region = os.getenv("AZURE_SPEECH_REGION")
+# Check for small talk
 
-    if not speech_key or not speech_region:
-        return None
+def is_small_talk(message):
+    message = message.lower().strip()
+    small_talk_phrases = ["hi", "hello", "hey", "thank you", "thanks", "bye", "goodbye", "start", "reset"]
+    return any(phrase in message for phrase in small_talk_phrases)
 
-    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
-    speech_config.speech_synthesis_voice_name = "en-US-AriaNeural"
-    filename = f"static/audio/output_{uuid.uuid4()}.mp3"
-    audio_config = speechsdk.audio.AudioOutputConfig(filename=filename)
-
-    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-    result = synthesizer.speak_text_async(text).get()
-
-    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-        return f"/{filename}"
-    else:
-        return None
-
-# Fetch response from vector DB
+# Fetch response and citations
 def fetchData(user_question):
+    if is_small_talk(user_question):
+        if "thank" in user_question:
+            return "You're welcome! 😊", []
+        elif "bye" in user_question or "goodbye" in user_question:
+            return "Goodbye! Have a great day!", []
+        elif "start" in user_question:
+            return WELCOME_MESSAGE, []
+        else:
+            return "I'm here to help. How can I assist you today?", []
+            
     try:
         vector_store = FaissVectorStore.from_persist_dir(PERSIST_DIR)
-        storage_context = StorageContext.from_defaults(vector_store=vector_store, persist_dir=PERSIST_DIR)
+        storage_context = StorageContext.from_defaults(
+            vector_store=vector_store, persist_dir=PERSIST_DIR
+        )
         index = load_index_from_storage(storage_context=storage_context)
-        query_engine = index.as_query_engine(similarity_top_k=3, response_mode="compact")
+        query_engine = index.as_query_engine()
         response = query_engine.query(user_question)
 
         sources = []
-        for node in response.source_nodes:
-            meta = node.metadata
+        for node in getattr(response, 'source_nodes', []):
+            meta = node.node.metadata
             if "file_name" in meta:
                 sources.append(meta["file_name"])
-        return str(response), sources
+                
+        return str(response), list(set(sources))
+
     except Exception as e:
         return f"Error: {str(e)}", []
 
@@ -64,7 +61,6 @@ def chat():
 def send_message():
     data = request.get_json()
     user_message = data.get("message", "").strip()
-
     if not user_message:
         return jsonify({"error": "Empty message"}), 400
 
@@ -72,24 +68,27 @@ def send_message():
         session["chat_history"] = [{"sender": "AI", "message": WELCOME_MESSAGE}]
 
     session["chat_history"].append({"sender": "Human", "message": user_message})
+
+    # Add loading message
+    session["chat_history"].append({"sender": "AI", "message": "Fetching..."})
+    session.modified = True
+    
     response_text, sources = fetchData(user_message)
-    audio_path = text_to_speech(response_text)
-    session["chat_history"].append({"sender": "AI", "message": response_text})
+
+    # Replace last message (loading) with actual response
+    session["chat_history"][-1] = {"sender": "AI", "message": response_text}
     session.modified = True
 
     return jsonify({
         "user_message": user_message,
         "bot_response": response_text,
-        "sources": sources,
-        "audio": audio_path
+        "sources": sources
     })
 
 @app.route("/reset")
-def reset_chat():
+def reset_chat():More actions
     session.clear()
     return '', 204
 
 if __name__ == "__main__":
-    if not os.path.exists("static/audio"):
-        os.makedirs("static/audio")
     app.run(debug=True)
